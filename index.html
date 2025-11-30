@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>OLED Fireworks Generator</title>
+    <style>
+        /* Reset & Layout Dasar */
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000000; /* Pure Black untuk OLED */
+            font-family: 'Segoe UI', sans-serif;
+            touch-action: none; /* Mencegah zoom/scroll gestur */
+        }
+
+        canvas {
+            display: block;
+            cursor: pointer;
+        }
+
+        /* UI: Overlay Control Panel */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Agar klik tembus ke canvas */
+        }
+
+        /* Tombol-tombol UI */
+        .hud-btn {
+            pointer-events: auto;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            width: 45px;
+            height: 45px;
+        }
+
+        .hud-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #fff;
+            transform: scale(1.1);
+        }
+
+        /* Posisi Tombol */
+        #btn-fullscreen {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+        }
+
+        #btn-settings {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+        }
+
+        /* Panel Pengaturan */
+        #controls-panel {
+            pointer-events: auto;
+            position: absolute;
+            top: 75px;
+            right: 20px;
+            width: 260px;
+            background: rgba(10, 10, 10, 0.9);
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+            color: #eee;
+            transform: translateX(120%);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        #controls-panel.active {
+            transform: translateX(0);
+        }
+
+        h3 {
+            margin: 0 0 15px 0;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #fff;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+
+        .control-group {
+            margin-bottom: 18px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.8rem;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+
+        /* Custom Slider untuk Tampilan Gelap */
+        input[type="range"] {
+            width: 100%;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+        }
+
+        select {
+            width: 100%;
+            background: #000;
+            color: #fff;
+            border: 1px solid #444;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        /* Instruksi Pudar */
+        #hint {
+            position: absolute;
+            bottom: 30px;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 0.9rem;
+            animation: pulse 3s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Tombol Auto */
+        .toggle-switch {
+            width: 100%;
+            padding: 10px;
+            background: #222;
+            color: #fff;
+            border: 1px solid #444;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        .toggle-switch.active {
+            background: #fff;
+            color: #000;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <!-- Tombol Full Screen -->
+        <button id="btn-fullscreen" class="hud-btn" title="Layar Penuh">
+            ⛶
+        </button>
+
+        <!-- Tombol Pengaturan -->
+        <button id="btn-settings" class="hud-btn" title="Pengaturan">
+            ⚙️
+        </button>
+
+        <!-- Panel Kontrol -->
+        <div id="controls-panel">
+            <h3>OLED Controls</h3>
+            
+            <div class="control-group">
+                <label>Tema Warna Neon</label>
+                <select id="colorMode">
+                    <option value="random">RGB Random (Warni-warni)</option>
+                    <option value="cyberpunk">Cyberpunk (Pink/Cyan)</option>
+                    <option value="gold">Golden Luxury</option>
+                    <option value="matrix">Matrix Green</option>
+                    <option value="fire">Inferno Red</option>
+                    <option value="plasma">Plasma Blue</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Ukuran Ledakan</label>
+                <input type="range" id="size" min="20" max="150" value="60">
+            </div>
+
+            <div class="control-group">
+                <label>Kecepatan Pudar (Trail)</label>
+                <input type="range" id="trail" min="5" max="40" value="15">
+            </div>
+
+            <div class="control-group">
+                <button id="autoBtn" class="toggle-switch">Mode Auto: OFF</button>
+            </div>
+            
+            <div style="font-size: 0.7rem; color: #555; text-align: center; margin-top: 10px;">
+                Dibuat untuk layar OLED
+            </div>
+        </div>
+
+        <div id="hint">Sentuh layar untuk meledakkan</div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        // --- Setup Canvas ---
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let cw = window.innerWidth;
+        let ch = window.innerHeight;
+        
+        canvas.width = cw;
+        canvas.height = ch;
+
+        // --- Variabel Logika ---
+        let fireworks = [];
+        let particles = [];
+        let hue = 120;
+        let limiterTotal = 5;
+        let limiterTick = 0;
+        let timerTotal = 30; // Kecepatan auto
+        let timerTick = 0;
+        let mousedown = false;
+        let mx, my;
+        let isAuto = false;
+
+        // --- Konfigurasi Default ---
+        let config = {
+            particleCount: 60,
+            trailStrength: 0.15, // Semakin kecil, semakin panjang jejaknya (alpha overlay)
+            colorMode: 'random'
+        };
+
+        // --- Helper ---
+        function random(min, max) {
+            return Math.random() * (max - min) + min;
+        }
+
+        function calculateDistance(p1x, p1y, p2x, p2y) {
+            let xDistance = p1x - p2x;
+            let yDistance = p1y - p2y;
+            return Math.sqrt(Math.pow(xDistance, 2) + Math.pow(yDistance, 2));
+        }
+
+        // --- Class Firework (Roket) ---
+        class Firework {
+            constructor(sx, sy, tx, ty) {
+                this.x = sx;
+                this.y = sy;
+                this.sx = sx;
+                this.sy = sy;
+                this.tx = tx;
+                this.ty = ty;
+                this.distanceToTarget = calculateDistance(sx, sy, tx, ty);
+                this.distanceTraveled = 0;
+                
+                this.coordinates = [];
+                this.coordinateCount = 3;
+                while(this.coordinateCount--) {
+                    this.coordinates.push([this.x, this.y]);
+                }
+                
+                this.angle = Math.atan2(ty - sy, tx - sx);
+                this.speed = 2;
+                this.acceleration = 1.05;
+                this.brightness = random(60, 80); // Brightness tinggi untuk OLED
+                this.targetRadius = 1;
+            }
+
+            update(index) {
+                this.coordinates.pop();
+                this.coordinates.unshift([this.x, this.y]);
+
+                this.speed *= this.acceleration;
+                
+                let vx = Math.cos(this.angle) * this.speed;
+                let vy = Math.sin(this.angle) * this.speed;
+                
+                this.distanceTraveled = calculateDistance(this.sx, this.sy, this.x + vx, this.y + vy);
+
+                if(this.distanceTraveled >= this.distanceToTarget) {
+                    // Tentukan warna berdasarkan mode
+                    let explosionHue;
+                    if (config.colorMode === 'random') explosionHue = random(0, 360);
+                    else if (config.colorMode === 'cyberpunk') explosionHue = Math.random() > 0.5 ? 300 : 190; // Pink / Cyan
+                    else if (config.colorMode === 'gold') explosionHue = random(40, 55);
+                    else if (config.colorMode === 'matrix') explosionHue = random(100, 140);
+                    else if (config.colorMode === 'fire') explosionHue = random(0, 30);
+                    else if (config.colorMode === 'plasma') explosionHue = random(180, 240);
+
+                    createParticles(this.tx, this.ty, explosionHue);
+                    fireworks.splice(index, 1);
+                } else {
+                    this.x += vx;
+                    this.y += vy;
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.moveTo(this.coordinates[this.coordinates.length - 1][0], this.coordinates[this.coordinates.length - 1][1]);
+                ctx.lineTo(this.x, this.y);
+                // Warna roket putih kekuningan saat meluncur
+                ctx.strokeStyle = 'hsl(45, 100%, ' + this.brightness + '%)';
+                ctx.stroke();
+            }
+        }
+
+        // --- Class Particle (Ledakan) ---
+        class Particle {
+            constructor(x, y, hue) {
+                this.x = x;
+                this.y = y;
+                this.coordinates = [];
+                this.coordinateCount = 5;
+                while(this.coordinateCount--) {
+                    this.coordinates.push([this.x, this.y]);
+                }
+                
+                this.angle = random(0, Math.PI * 2);
+                this.speed = random(1, 15); // Kecepatan ledakan
+                this.friction = 0.95;
+                this.gravity = 1;
+                
+                this.hue = random(hue - 10, hue + 10);
+                // OLED MAGIC: Saturation 100%, Brightness 60-80%
+                this.brightness = random(60, 90); 
+                this.alpha = 1;
+                this.decay = random(0.015, 0.03); // Kecepatan menghilang
+            }
+
+            update(index) {
+                this.coordinates.pop();
+                this.coordinates.unshift([this.x, this.y]);
+                
+                this.speed *= this.friction;
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed + this.gravity;
+                
+                this.alpha -= this.decay;
+                
+                if(this.alpha <= this.decay) {
+                    particles.splice(index, 1);
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.moveTo(this.coordinates[this.coordinates.length - 1][0], this.coordinates[this.coordinates.length - 1][1]);
+                ctx.lineTo(this.x, this.y);
+                
+                // Pewarnaan HSLA standar
+                ctx.strokeStyle = 'hsla(' + this.hue + ', 100%, ' + this.brightness + '%, ' + this.alpha + ')';
+                
+                // Efek tebal garis agar lebih terlihat "berisi" di layar resolusi tinggi
+                ctx.lineWidth = 1.5; 
+                ctx.stroke();
+            }
+        }
+
+        function createParticles(x, y, hue) {
+            let particleCount = config.particleCount;
+            while(particleCount--) {
+                particles.push(new Particle(x, y, hue));
+            }
+        }
+
+        // --- Main Loop ---
+        function loop() {
+            requestAnimationFrame(loop);
+
+            // Trik OLED: 
+            // 1. destination-out untuk menghapus frame sebelumnya secara perlahan (efek trail)
+            // 2. lighter untuk membuat warna bertumpuk jadi putih terang (efek cahaya)
+            
+            ctx.globalCompositeOperation = 'destination-out';
+            // Opacity di sini mengatur panjangnya jejak. 
+            // Semakin kecil alpha (0.1), semakin panjang jejaknya (bagus untuk OLED hitam)
+            ctx.fillStyle = `rgba(0, 0, 0, ${config.trailStrength})`;
+            ctx.fillRect(0, 0, cw, ch);
+
+            // Ubah ke mode 'lighter' agar tumpukan partikel bersinar terang
+            ctx.globalCompositeOperation = 'lighter';
+
+            let i = fireworks.length;
+            while(i--) {
+                fireworks[i].draw();
+                fireworks[i].update(i);
+            }
+
+            let j = particles.length;
+            while(j--) {
+                particles[j].draw();
+                particles[j].update(j);
+            }
+
+            // Logika Auto / Mouse
+            if (isAuto) {
+                if (timerTick >= timerTotal) {
+                    // Random launch positions
+                    fireworks.push(new Firework(cw / 2, ch, random(0, cw), random(0, ch / 2)));
+                    timerTick = 0;
+                } else {
+                    timerTick++;
+                }
+            } else {
+                if(mousedown) {
+                    if(limiterTick >= limiterTotal) {
+                        fireworks.push(new Firework(cw / 2, ch, mx, my));
+                        limiterTick = 0;
+                    } else {
+                        limiterTick++;
+                    }
+                }
+            }
+        }
+
+        // --- Event Listeners UI & Interaksi ---
+
+        // 1. Mouse & Touch
+        canvas.addEventListener('mousemove', function(e) {
+            mx = e.pageX - canvas.offsetLeft;
+            my = e.pageY - canvas.offsetTop;
+        });
+
+        canvas.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            mousedown = true;
+            mx = e.pageX - canvas.offsetLeft;
+            my = e.pageY - canvas.offsetTop;
+            // Instant fire on click
+            fireworks.push(new Firework(cw / 2, ch, mx, my));
+        });
+
+        canvas.addEventListener('mouseup', function(e) {
+            e.preventDefault();
+            mousedown = false;
+        });
+        
+        // Touch support
+        canvas.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            mx = e.touches[0].pageX - canvas.offsetLeft;
+            my = e.touches[0].pageY - canvas.offsetTop;
+            mousedown = true;
+            fireworks.push(new Firework(cw / 2, ch, mx, my));
+            document.getElementById('hint').style.display = 'none'; // Sembunyikan hint setelah tap pertama
+        }, {passive: false});
+
+        canvas.addEventListener('touchend', () => mousedown = false);
+        canvas.addEventListener('touchmove', (e) => {
+            mx = e.touches[0].pageX - canvas.offsetLeft;
+            my = e.touches[0].pageY - canvas.offsetTop;
+        });
+
+        // 2. Resize Handler
+        window.addEventListener('resize', function() {
+            cw = window.innerWidth;
+            ch = window.innerHeight;
+            canvas.width = cw;
+            canvas.height = ch;
+        });
+
+        // 3. UI Controls
+        const btnSettings = document.getElementById('btn-settings');
+        const panel = document.getElementById('controls-panel');
+        
+        btnSettings.addEventListener('click', (e) => {
+            e.stopPropagation(); // Jangan trigger kembang api
+            panel.classList.toggle('active');
+        });
+
+        // Tutup panel jika klik di luar panel
+        document.addEventListener('click', (e) => {
+            if (!panel.contains(e.target) && e.target !== btnSettings) {
+                panel.classList.remove('active');
+            }
+        });
+
+        // 4. Full Screen Logic
+        const btnFullscreen = document.getElementById('btn-fullscreen');
+        btnFullscreen.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch((err) => {
+                    console.log(`Error: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        });
+
+        // 5. Input Bindings
+        document.getElementById('size').addEventListener('input', (e) => {
+            config.particleCount = parseInt(e.target.value);
+        });
+
+        document.getElementById('trail').addEventListener('input', (e) => {
+            // Slider value 5-40 maps to opacity 0.05 - 0.4
+            config.trailStrength = parseInt(e.target.value) / 100;
+        });
+
+        document.getElementById('colorMode').addEventListener('change', (e) => {
+            config.colorMode = e.target.value;
+        });
+
+        const autoBtn = document.getElementById('autoBtn');
+        autoBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            isAuto = !isAuto;
+            if(isAuto) {
+                autoBtn.classList.add('active');
+                autoBtn.innerText = "Mode Auto: ON";
+            } else {
+                autoBtn.classList.remove('active');
+                autoBtn.innerText = "Mode Auto: OFF";
+            }
+        });
+
+        // Start
+        window.onload = loop;
+
+    </script>
+</body>
+</html>
+
+a
